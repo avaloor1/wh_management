@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import streamlit as st
 from config import get_connection
 
 # Snowflake connection function
@@ -19,7 +18,7 @@ def run_show_command_to_df(cur, command):
 
 
 # UI Layout
-st.title("❄️ Snowflake Optimization Monitoring Dashboard")
+st.title("❄️ Snowflake Warehouse Monitoring Dashboard")
 
 st.sidebar.title("📊 Sections")
 section = st.sidebar.radio("Choose a metric view:", [
@@ -32,15 +31,15 @@ section = st.sidebar.radio("Choose a metric view:", [
     "Warehouse Load Summary",
     "Cluster Config (Min/Max)",
     "Queued Time Analysis"
-    
+
 ])
 
 # Sections
 if section == "Credit Usage Overview":
     st.subheader("Credit Usage (Last 24H)")
     query = """
-    SELECT 
-    WAREHOUSE_NAME, 
+    SELECT
+    WAREHOUSE_NAME,
     SUM(CREDITS_USED) AS TOTAL_CREDITS
     FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
     GROUP BY WAREHOUSE_NAME
@@ -62,20 +61,20 @@ elif section == "Long-Running Queries":
 elif section == "Bytes Scanned & Cache Hit %":
     st.subheader("Bytes Scanned & Cache Usage (Last 24H)")
     query = """
-    SELECT QUERY_ID, 
+    SELECT QUERY_ID,
        BYTES_SCANNED / 1024 / 1024 AS BYTES_SCANNED, PERCENTAGE_SCANNED_FROM_CACHE  / 1024 / 1024 AS CACHE_HIT,
        (PERCENTAGE_SCANNED_FROM_CACHE / NULLIF(BYTES_SCANNED, 0)) * 100 AS CACHE_HIT_PERCENT
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP)
     ORDER BY BYTES_SCANNED DESC
-    LIMIT 10;   
+    LIMIT 10;
     """
     st.dataframe(run_query(query))
-    
+
 elif section == "Local Spill Analysis":
     st.subheader("Top 10 Queries with Local Spill (Last 24H)")
     query = """
-    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, 
+    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
            BYTES_SPILLED_TO_LOCAL_STORAGE / 1024 / 1024 AS MB_LOCAL_SPILL
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP)
@@ -84,11 +83,11 @@ elif section == "Local Spill Analysis":
     LIMIT 10;
     """
     st.dataframe(run_query(query))
-    
+
 elif section == "Remote Spill Analysis":
     st.subheader("Top 10 Queries with Remote Spill (Last 24H)")
     query = """
-    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, 
+    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
            BYTES_SPILLED_TO_REMOTE_STORAGE / 1024 / 1024 AS MB_REMOTE_SPILL
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP)
@@ -114,11 +113,11 @@ elif section == "Warehouse Load Summary":
     ORDER BY AVG_QUEUE_LOAD  DESC;
     """
     st.dataframe(run_query(query))
-    
+
 elif section == "Queued Time Analysis":
     st.subheader("Warehouse Queued Time Metrics (Last 24H)")
     query = """
-    SELECT WAREHOUSE_NAME, 
+    SELECT WAREHOUSE_NAME,
            AVG(AVG_RUNNING) AS AVG_RUNNING,
            AVG(AVG_QUEUED_LOAD) AS AVG_QUEUE_LOAD,
            AVG(AVG_QUEUED_PROVISIONING) AS AVG_PROVISIONING_TIME_SECONDS
@@ -128,7 +127,7 @@ elif section == "Queued Time Analysis":
     ORDER BY AVG_QUEUE_LOAD DESC;
     """
     st.dataframe(run_query(query))
-    
+
 elif section == "Cluster Config (Min/Max)":
     st.subheader("Warehouse Cluster Min/Max Settings")
 
@@ -151,12 +150,34 @@ elif section == "Cluster Config (Min/Max)":
         cur.close()
 
 elif section == "Live Dashboard":
+    import time
     st.subheader("⏱️ Live Warehouse & Query Monitoring (Last 10 min)")
+
+    # Set auto-refresh interval in seconds
+    refresh_interval = 1
+
+    # Initialize a timestamp in session state if not set
+    if "last_refresh" not in st.session_state:
+        st.session_state["last_refresh"] = time.time()
+
+    # Calculate elapsed time since last refresh
+    elapsed = time.time() - st.session_state["last_refresh"]
+
+    # If elapsed time exceeds refresh interval, rerun
+    if elapsed > refresh_interval:
+        st.warning("Elapsed")
+        st.session_state["last_refresh"] = time.time()
+        st.rerun()
+
+    # Display status info
+    st.write(f"⏳ Auto-refreshing every {refresh_interval} seconds. Last refreshed {int(elapsed)} seconds ago.")
+
+    #st.subheader("⏱️ Live Warehouse & Query Monitoring (Last 10 min)")
 
     # Active Queries in last 10 min
     st.write("### Active Queries (Last 10 min)")
     query = """
-    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, EXECUTION_STATUS, 
+    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, EXECUTION_STATUS,
            TOTAL_ELAPSED_TIME/1000 AS SECONDS_ELAPSED
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('minute', -10, CURRENT_TIMESTAMP)
@@ -167,17 +188,18 @@ elif section == "Live Dashboard":
 
     # Active Warehouse State
     st.write("### Warehouse State Snapshot")
+
     cur = conn.cursor()
-    cur.execute("SHOW WAREHOUSES")
-    results = cur.fetchall()
-    columns = [col[0] for col in cur.description]
-    df_wh_state = pd.DataFrame(results, columns=columns)
+    try:
+        df_wh_state = run_show_command_to_df(cur, "SHOW WAREHOUSES")
+    finally:
+        cur.close()
     st.dataframe(df_wh_state[['name', 'state', 'size', 'running', 'queued', 'scaling_policy']])
 
     # Warehouse Load (Last 10 min)
     st.write("### Warehouse Load Metrics (Last 10 min)")
     query = """
-    SELECT WAREHOUSE_NAME, 
+    SELECT WAREHOUSE_NAME,
            AVG(AVG_RUNNING) AS AVG_RUNNING,
            AVG(AVG_QUEUED_LOAD) AS AVG_QUEUED_LOAD,
            AVG(AVG_QUEUED_PROVISIONING) AS AVG_PROVISIONING_TIME
@@ -187,6 +209,6 @@ elif section == "Live Dashboard":
     ORDER BY AVG_QUEUED_LOAD DESC;
     """
     st.dataframe(run_query(query))
-   
+
     if st.button("🔄 Refresh the Dashboard", type="tertiary"):
         st.rerun()
