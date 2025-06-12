@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import streamlit as st
-from sqlalchemy import text
 from config import get_connection
 
 # Snowflake connection function
