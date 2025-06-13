@@ -18,24 +18,24 @@ def run_show_command_to_df(cur, command):
 
 
 # UI Layout
-st.title("❄️ Snowflake Warehouse Monitoring Dashboard")
+st.title("Warehouse Monitoring Dashboard")
 
-st.sidebar.title("📊 Sections")
+st.sidebar.title("🎲 Choose and option")
 section = st.sidebar.radio("Choose a metric view:", [
-    "Live Dashboard",
-    "Credit Usage Overview",
-    "Long-Running Queries",
-    "Bytes Scanned & Cache Hit %",
-    "Local Spill Analysis",
-    "Remote Spill Analysis",
-    "Warehouse Load Summary",
-    "Cluster Config (Min/Max)",
-    "Queued Time Analysis"
+    "Live Dashboard 📈",
+    "Credit Usage Overview 💰",
+    "Long-Running Queries 🏃🏻‍♀️‍➡️",
+    "Bytes Scanned & Cache Hit % 🎯",
+    "Local Spill Analysis 🫗",
+    "Remote Spill Analysis 🍾",
+    "Warehouse Load Summary 🏋🏻‍♂️",
+    "Cluster Config (Min/Max) ✨",
+    "Queued Time Analysis ⏳"
 
 ])
 
 # Sections
-if section == "Credit Usage Overview":
+if section == "Credit Usage Overview 💰":
     st.subheader("Credit Usage (Last 24H)")
     query = """
     SELECT
@@ -47,7 +47,7 @@ if section == "Credit Usage Overview":
     """
     st.dataframe(run_query(query))
 
-elif section == "Long-Running Queries":
+elif section == "Long-Running Queries 🏃🏻‍♀️‍➡️":
     st.subheader("Long-Running Queries (>5 min, Last 24H)")
     query = """
     SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, TOTAL_ELAPSED_TIME/60000 AS MINUTES
@@ -58,7 +58,7 @@ elif section == "Long-Running Queries":
     """
     st.dataframe(run_query(query))
 
-elif section == "Bytes Scanned & Cache Hit %":
+elif section == "Bytes Scanned & Cache Hit % 🎯":
     st.subheader("Bytes Scanned & Cache Usage (Last 24H)")
     query = """
     SELECT QUERY_ID,
@@ -71,7 +71,7 @@ elif section == "Bytes Scanned & Cache Hit %":
     """
     st.dataframe(run_query(query))
 
-elif section == "Local Spill Analysis":
+elif section == "Local Spill Analysis 🫗":
     st.subheader("Top 10 Queries with Local Spill (Last 24H)")
     query = """
     SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
@@ -84,7 +84,7 @@ elif section == "Local Spill Analysis":
     """
     st.dataframe(run_query(query))
 
-elif section == "Remote Spill Analysis":
+elif section == "Remote Spill Analysis 🍾":
     st.subheader("Top 10 Queries with Remote Spill (Last 24H)")
     query = """
     SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
@@ -98,7 +98,7 @@ elif section == "Remote Spill Analysis":
     st.dataframe(run_query(query))
     st.caption("Remote storage spills are more costly and impact performance — investigate queries and warehouse sizing.")
 
-elif section == "Warehouse Load Summary":
+elif section == "Warehouse Load Summary 🏋🏻‍♂️":
     st.subheader("Warehouse Load Summary (Last 24H)")
     query = """
     SELECT WAREHOUSE_NAME,
@@ -114,7 +114,7 @@ elif section == "Warehouse Load Summary":
     """
     st.dataframe(run_query(query))
 
-elif section == "Queued Time Analysis":
+elif section == "Queued Time Analysis ⏳":
     st.subheader("Warehouse Queued Time Metrics (Last 24H)")
     query = """
     SELECT WAREHOUSE_NAME,
@@ -128,7 +128,7 @@ elif section == "Queued Time Analysis":
     """
     st.dataframe(run_query(query))
 
-elif section == "Cluster Config (Min/Max)":
+elif section == "Cluster Config (Min/Max) ✨":
     st.subheader("Warehouse Cluster Min/Max Settings")
 
     cur = conn.cursor()
@@ -149,30 +149,8 @@ elif section == "Cluster Config (Min/Max)":
     finally:
         cur.close()
 
-elif section == "Live Dashboard":
-    import time
-    st.subheader("⏱️ Live Warehouse & Query Monitoring (Last 10 min)")
-
-    # Set auto-refresh interval in seconds
-    refresh_interval = 1
-
-    # Initialize a timestamp in session state if not set
-    if "last_refresh" not in st.session_state:
-        st.session_state["last_refresh"] = time.time()
-
-    # Calculate elapsed time since last refresh
-    elapsed = time.time() - st.session_state["last_refresh"]
-
-    # If elapsed time exceeds refresh interval, rerun
-    if elapsed > refresh_interval:
-        st.warning("Elapsed")
-        st.session_state["last_refresh"] = time.time()
-        st.rerun()
-
-    # Display status info
-    st.write(f"⏳ Auto-refreshing every {refresh_interval} seconds. Last refreshed {int(elapsed)} seconds ago.")
-
-    #st.subheader("⏱️ Live Warehouse & Query Monitoring (Last 10 min)")
+elif section == "Live Dashboard 📈":
+    st.subheader("Live Warehouse & Query Monitoring (Last 10 min)")
 
     # Active Queries in last 10 min
     st.write("### Active Queries (Last 10 min)")
