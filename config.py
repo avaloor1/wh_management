@@ -9,6 +9,8 @@ def get_connection():
     private_key_path = st.secrets["credentials"]["private_key_path"]
  #   passphrase = st.secrets["credentials"]["private_key_passphrase"].encode()  # read passphrase from secrets
     passphrase = os.getenv("DBT_RSA_PASS")
+    
+    st.write(passphrase)
 
     if passphrase:
         passphrase = passphrase.encode('utf-8')
