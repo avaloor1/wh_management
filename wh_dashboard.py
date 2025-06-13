@@ -1,9 +1,11 @@
 import streamlit as st
+import re
 import pandas as pd
 from config import get_connection
 
 # Snowflake connection function
 conn = get_connection()
+cur = conn.cursor()
 
 # Run query
 def run_query(query):
@@ -16,12 +18,44 @@ def run_show_command_to_df(cur, command):
     columns = [col[0] for col in cur.description]
     return pd.DataFrame(results, columns=columns)
 
+# Function to run a query and return result
+def run_query_single(query):
+    cur.execute(query)
+    return cur.fetchone()
+
+def count_joins_in_text(query_text):
+    if query_text:
+        # count case-insensitive occurrences of JOIN, avoiding keywords like JOINED
+        joins = re.findall(r'\bJOIN\b', query_text, flags=re.IGNORECASE)
+        return len(joins)
+    else:
+        return 0
+
 
 # UI Layout
-st.title("Warehouse Monitoring Dashboard")
+#st.title("Warehouse Monitoring Dashboard")
+st.set_page_config(
+    page_title="Warehouse Monitoring Dashboard",
+    layout="wide",  # This makes the app use the full width of the browser
+)
 
-st.sidebar.title("🎲 Choose and option")
-section = st.sidebar.radio("Choose a metric view:", [
+# Custom CSS to limit content width while still using 'wide' layout
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 1150px;
+        margin: auto;
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.sidebar.title(" Choose an option 🎲 ")
+section = st.sidebar.radio("", [
     "Live Dashboard 📈",
     "Credit Usage Overview 💰",
     "Long-Running Queries 🏃🏻‍♀️‍➡️",
@@ -58,6 +92,24 @@ elif section == "Long-Running Queries 🏃🏻‍♀️‍➡️":
     """
     st.dataframe(run_query(query))
 
+    selected_query_id = st.text_input("Enter a Query ID to inspect:")
+
+    if selected_query_id:
+        detail_query = f"""
+        SELECT QUERY_TEXT
+        FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+        WHERE QUERY_ID = '{selected_query_id}'
+        """
+        result = run_query_single(detail_query)
+
+        if result:
+            query_text = result[0]
+            join_count = count_joins_in_text(query_text)
+            st.write(f"**Estimated number of JOINs in query:** {join_count}")
+            st.text_area("Query Text", query_text, height=300)
+        else:
+            st.write("Query not found or still in history ingestion window.")
+
 elif section == "Bytes Scanned & Cache Hit % 🎯":
     st.subheader("Bytes Scanned & Cache Usage (Last 24H)")
     query = """
@@ -75,11 +127,11 @@ elif section == "Local Spill Analysis 🫗":
     st.subheader("Top 10 Queries with Local Spill (Last 24H)")
     query = """
     SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
-           BYTES_SPILLED_TO_LOCAL_STORAGE / 1024 / 1024 AS MB_LOCAL_SPILL
+           BYTES_SPILLED_TO_LOCAL_STORAGE / 1024 / 1024 AS LOCAL_SPILL
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP)
       AND BYTES_SPILLED_TO_LOCAL_STORAGE > 0
-    ORDER BY MB_LOCAL_SPILL DESC
+    ORDER BY LOCAL_SPILL DESC
     LIMIT 10;
     """
     st.dataframe(run_query(query))
@@ -88,15 +140,14 @@ elif section == "Remote Spill Analysis 🍾":
     st.subheader("Top 10 Queries with Remote Spill (Last 24H)")
     query = """
     SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME,
-           BYTES_SPILLED_TO_REMOTE_STORAGE / 1024 / 1024 AS MB_REMOTE_SPILL
+           BYTES_SPILLED_TO_REMOTE_STORAGE / 1024 / 1024 AS REMOTE_SPILL
     FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
     WHERE START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP)
       AND BYTES_SPILLED_TO_REMOTE_STORAGE > 0
-    ORDER BY MB_REMOTE_SPILL DESC
+    ORDER BY REMOTE_SPILL DESC
     LIMIT 10;
     """
     st.dataframe(run_query(query))
-    st.caption("Remote storage spills are more costly and impact performance — investigate queries and warehouse sizing.")
 
 elif section == "Warehouse Load Summary 🏋🏻‍♂️":
     st.subheader("Warehouse Load Summary (Last 24H)")
@@ -152,6 +203,16 @@ elif section == "Cluster Config (Min/Max) ✨":
 elif section == "Live Dashboard 📈":
     st.subheader("Live Warehouse & Query Monitoring (Last 10 min)")
 
+    # Active Warehouse State
+    st.write("### Warehouse State")
+
+    cur = conn.cursor()
+    try:
+        df_wh_state = run_show_command_to_df(cur, "SHOW WAREHOUSES")
+    finally:
+        cur.close()
+    st.dataframe(df_wh_state[['name', 'state', 'size', 'running', 'queued', 'scaling_policy']])
+
     # Active Queries in last 10 min
     st.write("### Active Queries (Last 10 min)")
     query = """
@@ -163,16 +224,6 @@ elif section == "Live Dashboard 📈":
     ORDER BY START_TIME DESC;
     """
     st.dataframe(run_query(query))
-
-    # Active Warehouse State
-    st.write("### Warehouse State Snapshot")
-
-    cur = conn.cursor()
-    try:
-        df_wh_state = run_show_command_to_df(cur, "SHOW WAREHOUSES")
-    finally:
-        cur.close()
-    st.dataframe(df_wh_state[['name', 'state', 'size', 'running', 'queued', 'scaling_policy']])
 
     # Warehouse Load (Last 10 min)
     st.write("### Warehouse Load Metrics (Last 10 min)")
