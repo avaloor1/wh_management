@@ -1,16 +1,22 @@
 import streamlit as st
+import os
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 import snowflake.connector
 
- 
+
 def get_connection():
     private_key_path = st.secrets["credentials"]["private_key_path"]
+ #   passphrase = st.secrets["credentials"]["private_key_passphrase"].encode()  # read passphrase from secrets
+    passphrase = os.getenv("DBT_RSA_PASS")
+
+    if passphrase:
+        passphrase = passphrase.encode('utf-8')
 
     with open(private_key_path, "rb") as key_file:
         private_key = serialization.load_pem_private_key(
             key_file.read(),
-            password=None,
+            password=passphrase  # pass the passphrase here
         )
 
     pk_bytes = private_key.private_bytes(
